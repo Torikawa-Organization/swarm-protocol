@@ -1,0 +1,16 @@
+[package]
+name = "swarm-protocol-sdk"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+lum_log = "0.3.2"
+prost = "0.14.3"
+thiserror = "2.0.18"
+tokio = { version = "1.49.0", features = ["full"] }
+tokio-util = "0.7.18"
+tokio-utils = "0.1.2"
+
+[build-dependencies]
+prost-build = "0.14.3"
+walkdir = "2.5.0"

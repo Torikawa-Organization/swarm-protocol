@@ -1,0 +1,16 @@
+syntax = "proto3";
+package agent.handshake;
+
+message AgentAuthenticate {
+    string secret = 1;
+}
+
+enum ServerResponseAuthenticationStatus {
+    SERVER_RESPONSE_AUTHENTICATION_STATUS_UNSPECIFIED = 0;
+    SERVER_RESPONSE_AUTHENTICATION_STATUS_SUCCESS = 1;
+    SERVER_RESPONSE_AUTHENTICATION_STATUS_FAILURE = 2;
+}
+
+message ServerResponseAuthentication {
+    ServerResponseAuthenticationStatus status = 1;
+}

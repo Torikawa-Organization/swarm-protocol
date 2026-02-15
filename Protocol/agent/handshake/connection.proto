@@ -1,0 +1,25 @@
+syntax = "proto3";
+package agent.handshake;
+
+import "version.proto";
+
+message AgentRequestConnection {
+    Version version = 1;
+    string identifier = 2;
+}
+
+enum ServerResponseConnectionStatus {
+    SERVER_RESPONSE_CONNECTION_STATUS_UNSPECIFIED = 0;
+    SERVER_RESPONSE_CONNECTION_STATUS_ACCEPTED = 1;
+    SERVER_RESPONSE_CONNECTION_STATUS_REJECTED = 2;
+}
+
+enum ServerResponseConnectionError {
+    SERVER_RESPONSE_CONNECTION_ERROR_UNSPECIFIED = 0;
+    SERVER_RESPONSE_CONNECTION_ERROR_UNSUPPORTED_PROTOCOL_VERSION = 1;
+}
+
+message ServerResponseConnection {
+    ServerResponseConnectionStatus status = 1;
+    ServerResponseConnectionError error = 2;
+}

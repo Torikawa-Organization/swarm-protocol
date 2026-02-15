@@ -1,0 +1,12 @@
+syntax = "proto3";
+package agent;
+
+import "agent/agent_packet.proto";
+import "agent/server_packet.proto";
+
+message Packet {
+    oneof packet {
+        AgentPacket agent_packet = 1;
+        ServerPacket server_packet = 2;
+    }
+}
