@@ -70,14 +70,14 @@ pub enum AgentPacketReadError {
 
 #[derive(Debug, Error)]
 pub enum HandshakeError {
+    #[error("Error while reading packet from Agent: {0}")]
+    PacketRead(#[from] PacketReadError),
+
     #[error("Received a packet with no payload from Agent during handshake")]
     NoPayload,
 
     #[error("Received a packet of unexpected type from Agent during handshake")]
     UnexpectedPacketType,
-
-    #[error("Error while reading packet from Agent: {0}")]
-    PacketRead(#[from] PacketReadError),
 
     #[error("Agent specified an unknown protocol version during handshake: {0}")]
     UnknownProtocolVersion(i32),
