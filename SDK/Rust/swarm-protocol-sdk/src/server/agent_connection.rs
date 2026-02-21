@@ -1,0 +1,210 @@
+use std::time::Duration;
+
+use thiserror::Error;
+use tokio::{
+    io::{BufReader, BufWriter},
+    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
+};
+
+use crate::{
+    networking::{PacketReadError, PacketWriteError, read_packet, write_packet},
+    protocol::{
+        self, Version,
+        agent::{
+            AgentPacket, Packet, ServerPacket,
+            agent_packet::Packet as AgentPacketE,
+            handshake::{
+                ServerResponseConnection, ServerResponseConnectionError,
+                ServerResponseConnectionStatus,
+            },
+            packet::Packet as PacketE,
+            server_packet::Packet as ServerPacketE,
+        },
+    },
+};
+
+static RESPONSE_REJECTED_FAILED_TO_PARSE: Packet = Packet {
+    packet: Some(PacketE::ServerPacket(ServerPacket {
+        packet: Some(ServerPacketE::ServerResponseConnection(
+            ServerResponseConnection {
+                status: ServerResponseConnectionStatus::Rejected as i32,
+                error: ServerResponseConnectionError::FailedToParse as i32,
+            },
+        )),
+    })),
+};
+
+static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
+    packet: Some(PacketE::ServerPacket(ServerPacket {
+        packet: Some(ServerPacketE::ServerResponseConnection(
+            ServerResponseConnection {
+                status: ServerResponseConnectionStatus::Rejected as i32,
+                error: ServerResponseConnectionError::UnsupportedProtocolVersion as i32,
+            },
+        )),
+    })),
+};
+
+static RESPONSE_ACCEPTED: Packet = Packet {
+    packet: Some(PacketE::ServerPacket(ServerPacket {
+        packet: Some(ServerPacketE::ServerResponseConnection(
+            ServerResponseConnection {
+                status: ServerResponseConnectionStatus::Accepted as i32,
+                error: ServerResponseConnectionError::Unspecified as i32,
+            },
+        )),
+    })),
+};
+
+#[derive(Debug, Error)]
+pub enum AgentPacketReadError {
+    #[error("Error reading packet: {0}")]
+    PacketRead(#[from] PacketReadError),
+
+    #[error("Received packet has no payload")]
+    NoPayload,
+
+    #[error("Received packet is not an AgentPacket")]
+    NoAgentPacket,
+}
+
+#[derive(Debug, Error)]
+pub enum HandshakeError {
+    #[error("Received a packet with no payload from Agent during handshake")]
+    NoPayload,
+
+    #[error("Received a packet of unexpected type from Agent during handshake")]
+    UnexpectedPacketType,
+
+    #[error("Error while reading packet from Agent: {0}")]
+    PacketRead(#[from] PacketReadError),
+
+    #[error("Agent specified an unknown protocol version during handshake: {0}")]
+    UnknownProtocolVersion(i32),
+
+    #[error("Unsupported protocol version. Expected {expected}, got {found}")]
+    UnsupportedProtocolVersion { expected: String, found: String },
+
+    #[error("Error while writing packet to Agent: {0}")]
+    PacketWrite(#[from] PacketWriteError),
+}
+
+pub struct AgentConnection {
+    identifier: String,
+    reader: BufReader<OwnedReadHalf>,
+    writer: BufWriter<OwnedWriteHalf>,
+}
+
+impl AgentConnection {
+    pub async fn handshake(
+        mut reader: BufReader<OwnedReadHalf>,
+        mut writer: BufWriter<OwnedWriteHalf>,
+    ) -> Result<Self, HandshakeError> {
+        let connection_request = match read_packet(&mut reader, Duration::from_secs(2)).await {
+            Ok(packet) => packet,
+            Err(e) => {
+                let _ = write_packet(
+                    &mut writer,
+                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                    Duration::from_secs(2),
+                )
+                .await;
+                return Err(HandshakeError::PacketRead(e));
+            }
+        };
+
+        let agent_request_connection = match connection_request.packet {
+            Some(PacketE::AgentPacket(AgentPacket {
+                packet: Some(AgentPacketE::AgentRequestConnection(req)),
+            })) => req,
+            Some(PacketE::AgentPacket(AgentPacket { packet: None })) | None => {
+                let _ = write_packet(
+                    &mut writer,
+                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                    Duration::from_secs(2),
+                )
+                .await;
+                return Err(HandshakeError::NoPayload);
+            }
+            _ => {
+                let _ = write_packet(
+                    &mut writer,
+                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                    Duration::from_secs(2),
+                )
+                .await;
+                return Err(HandshakeError::UnexpectedPacketType);
+            }
+        };
+
+        let protocol_version = agent_request_connection.version;
+        let protocol_version = match Version::try_from(protocol_version) {
+            Ok(version) => version,
+            Err(_) => {
+                let _ = write_packet(
+                    &mut writer,
+                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                    Duration::from_secs(2),
+                )
+                .await;
+                return Err(HandshakeError::UnknownProtocolVersion(protocol_version));
+            }
+        };
+
+        let expected_version = protocol::VERSION;
+        if protocol_version != expected_version {
+            let _ = write_packet(
+                &mut writer,
+                &RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
+                Duration::from_secs(2),
+            )
+            .await;
+            return Err(HandshakeError::UnsupportedProtocolVersion {
+                expected: expected_version.as_str_name().to_string(),
+                found: protocol_version.as_str_name().to_string(),
+            });
+        }
+
+        write_packet(&mut writer, &RESPONSE_ACCEPTED, Duration::from_secs(2)).await?;
+
+        let identifier = agent_request_connection.identifier;
+        Ok(Self {
+            identifier,
+            reader,
+            writer,
+        })
+    }
+
+    pub fn identifier(&self) -> &str {
+        &self.identifier
+    }
+
+    pub async fn read_packet(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<AgentPacket, AgentPacketReadError> {
+        let reader = &mut self.reader;
+
+        let packet = read_packet(reader, timeout).await?;
+        match packet.packet {
+            Some(packet) => match packet {
+                PacketE::AgentPacket(agent_packet) => Ok(agent_packet),
+                _ => Err(AgentPacketReadError::NoAgentPacket),
+            },
+            _ => Err(AgentPacketReadError::NoPayload),
+        }
+    }
+
+    pub async fn write_packet(
+        &mut self,
+        server_packet: ServerPacket,
+        timeout: Duration,
+    ) -> Result<(), PacketWriteError> {
+        let packet = Packet {
+            packet: Some(PacketE::ServerPacket(server_packet)),
+        };
+
+        let writer = &mut self.writer;
+        write_packet(writer, &packet, timeout).await
+    }
+}

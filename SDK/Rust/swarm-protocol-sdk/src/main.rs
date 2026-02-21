@@ -1,5 +1,5 @@
 use lum_log::{info, log::LevelFilter};
-use swarm_protocol_sdk::agent::server::Server as AgentServer;
+use swarm_protocol_sdk::server::agent_server::AgentServer;
 use tokio::signal;
 
 #[tokio::main]
@@ -18,5 +18,5 @@ pub async fn main() {
     signal::ctrl_c()
         .await
         .expect("Listening for Ctrl+C should work");
-    info!("Ctrl+C received, exiting...");
+    info!("Ctrl+C received, exiting");
 }

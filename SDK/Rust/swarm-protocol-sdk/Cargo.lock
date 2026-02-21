@@ -976,6 +976,7 @@ dependencies = [
 name = "swarm-protocol-sdk"
 version = "0.1.0"
 dependencies = [
+ "humantime",
  "lum_log",
  "prost",
  "prost-build",

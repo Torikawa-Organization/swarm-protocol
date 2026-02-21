@@ -2,16 +2,13 @@ syntax = "proto3";
 package agent;
 
 import "agent/handshake/connection.proto";
-import "agent/handshake/encryption.proto";
 import "agent/handshake/authentication.proto";
 import "agent/payload/message.proto";
 
 message AgentPacket {
     oneof packet {
         handshake.AgentRequestConnection agent_request_connection = 1;
-        handshake.AgentRequestEncryption agent_request_encryption = 2;
-        handshake.AgentResponseChallenge agent_response_challenge = 3;
-        handshake.AgentAuthenticate agent_authenticate = 4;
-        payload.AgentMessage agent_message = 5;
+        handshake.AgentAuthenticate agent_authenticate = 2;
+        payload.AgentMessage agent_message = 3;
     }
 }
