@@ -10,7 +10,10 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::server::agent_connection::{AgentConnection, HandshakeError};
+use crate::server::{
+    agent_connection::{AgentConnection, HandshakeError},
+    agent_connection_manager::{AddAgentConnectionError, AgentConnectionManager},
+};
 
 #[derive(Debug, Error)]
 pub enum AgentServerCreateError {
@@ -18,9 +21,18 @@ pub enum AgentServerCreateError {
     IO(#[from] io::Error),
 }
 
+#[derive(Debug, Error)]
+pub enum AcceptConnectionError {
+    #[error("Handshake error: {0}")]
+    Handshake(#[from] HandshakeError),
+
+    #[error("Failed to add agent connection: {0}")]
+    AddAgentConnection(#[from] AddAgentConnectionError),
+}
+
 pub struct AgentServerState {
     listener: TcpListener,
-    connections: Mutex<Vec<AgentConnection>>,
+    connection_manager: AgentConnectionManager,
     cancelled: CancellationToken,
     receiver_task: Mutex<Option<JoinHandle<()>>>,
 }
@@ -37,14 +49,14 @@ impl AgentServer {
         let listener = TcpListener::bind(addr).await?;
         info!("Starting Agent server on {}", listener.local_addr()?);
 
-        let connections = Mutex::new(Vec::new());
+        let connection_manager = AgentConnectionManager::new();
         let cancelled = CancellationToken::new();
         let receiver_task = Mutex::new(None);
 
         let server = Self {
             state: Arc::new(AgentServerState {
                 listener,
-                connections,
+                connection_manager,
                 cancelled,
                 receiver_task,
             }),
@@ -117,7 +129,7 @@ impl AgentServer {
     async fn accept_connection(
         state: Arc<AgentServerState>,
         stream: TcpStream,
-    ) -> Result<(String, usize), HandshakeError> {
+    ) -> Result<(String, usize), AcceptConnectionError> {
         let (reader, writer) = stream.into_split();
         let reader = BufReader::new(reader);
         let writer = BufWriter::new(writer);
@@ -125,13 +137,8 @@ impl AgentServer {
         let connection = AgentConnection::handshake(reader, writer).await?;
 
         let identifier = connection.identifier().to_string();
-        let connections_count;
-        {
-            let mut connections = state.connections.lock().await;
-            connections.push(connection);
-
-            connections_count = connections.len();
-        }
+        state.connection_manager.add(connection)?;
+        let connections_count = state.connection_manager.count();
 
         Ok((identifier, connections_count))
     }
