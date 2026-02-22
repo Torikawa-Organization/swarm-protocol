@@ -1,14 +1,12 @@
 syntax = "proto3";
 package agent;
 
-import "agent/handshake/connection.proto";
-import "agent/handshake/authentication.proto";
-import "agent/payload/message.proto";
+import "agent/handshake/server.proto";
+import "agent/payload/server.proto";
 
 message ServerPacket {
     oneof packet {
-        handshake.ServerResponseConnection server_response_connection = 1;
-        handshake.ServerResponseAuthentication server_response_authentication = 2;
-        payload.ServerMessage server_message = 3;
+        handshake.ServerHandshakePacket server_handshake_packet = 1;
+        payload.ServerPayloadPacket server_payload_packet = 2;
     }
 }

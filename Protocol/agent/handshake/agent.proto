@@ -1,0 +1,20 @@
+syntax = "proto3";
+package agent.handshake;
+
+import "version.proto";
+
+message AgentRequestConnection {
+    Version version = 1;
+    string identifier = 2;
+}
+
+message AgentAuthenticate {
+    string secret = 1;
+}
+
+message AgentHandshakePacket {
+    oneof packet {
+        AgentRequestConnection agent_request_connection = 1;
+        AgentAuthenticate agent_authenticate = 2;
+    }
+}

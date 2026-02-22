@@ -1,0 +1,12 @@
+syntax = "proto3";
+package agent.payload;
+
+import "agent/payload/agent/heartbeat.proto";
+import "agent/payload/agent/disconnect.proto";
+
+message AgentPayloadPacket {
+    oneof packet {
+        AgentHeartbeat agent_heartbeat = 1;
+        AgentDisconnect agent_disconnect = 2;
+    }
+}

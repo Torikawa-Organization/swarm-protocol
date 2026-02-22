@@ -1,0 +1,12 @@
+syntax = "proto3";
+package agent.payload;
+
+enum AgentDisconnectReason {
+    AGENT_DISCONNECT_REASON_UNSPECIFIED = 0;
+    AGENT_DISCONNECT_REASON_GRACEFUL = 1;
+    AGENT_DISCONNECT_REASON_ERROR = 2;
+}
+
+message AgentDisconnect {
+    AgentDisconnectReason reason = 1;
+}

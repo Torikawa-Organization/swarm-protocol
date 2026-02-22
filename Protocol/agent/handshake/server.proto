@@ -1,13 +1,6 @@
 syntax = "proto3";
 package agent.handshake;
 
-import "version.proto";
-
-message AgentRequestConnection {
-    Version version = 1;
-    string identifier = 2;
-}
-
 enum ServerResponseConnectionStatus {
     SERVER_RESPONSE_CONNECTION_STATUS_UNSPECIFIED = 0;
     SERVER_RESPONSE_CONNECTION_STATUS_ACCEPTED = 1;
@@ -23,4 +16,21 @@ enum ServerResponseConnectionError {
 message ServerResponseConnection {
     ServerResponseConnectionStatus status = 1;
     ServerResponseConnectionError error = 2;
+}
+
+enum ServerResponseAuthenticationStatus {
+    SERVER_RESPONSE_AUTHENTICATION_STATUS_UNSPECIFIED = 0;
+    SERVER_RESPONSE_AUTHENTICATION_STATUS_SUCCESS = 1;
+    SERVER_RESPONSE_AUTHENTICATION_STATUS_FAILURE = 2;
+}
+
+message ServerResponseAuthentication {
+    ServerResponseAuthenticationStatus status = 1;
+}
+
+message ServerHandshakePacket {
+    oneof packet {
+        ServerResponseConnection server_response_connection = 1;
+        ServerResponseAuthentication server_response_authentication = 2;
+    }
 }

@@ -1,0 +1,10 @@
+syntax = "proto3";
+package agent.payload;
+
+import "agent/payload/server/disconnect.proto";
+
+message ServerPayloadPacket {
+    oneof packet {
+        ServerDisconnect server_disconnect = 1;
+    }
+}

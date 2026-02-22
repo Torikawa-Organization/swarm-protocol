@@ -14,10 +14,13 @@ use crate::{
             AgentPacket, Packet, ServerPacket,
             agent_packet::Packet as AgentPacketE,
             handshake::{
-                ServerResponseConnection, ServerResponseConnectionError,
-                ServerResponseConnectionStatus,
+                AgentHandshakePacket, ServerHandshakePacket, ServerResponseConnection,
+                ServerResponseConnectionError, ServerResponseConnectionStatus,
+                agent_handshake_packet::Packet as AgentHandshakePacketE,
+                server_handshake_packet::Packet as ServerHandshakePacketE,
             },
             packet::Packet as PacketE,
+            payload::{AgentPayloadPacket, ServerPayloadPacket},
             server_packet::Packet as ServerPacketE,
         },
     },
@@ -25,10 +28,14 @@ use crate::{
 
 static RESPONSE_REJECTED_FAILED_TO_PARSE: Packet = Packet {
     packet: Some(PacketE::ServerPacket(ServerPacket {
-        packet: Some(ServerPacketE::ServerResponseConnection(
-            ServerResponseConnection {
-                status: ServerResponseConnectionStatus::Rejected as i32,
-                error: ServerResponseConnectionError::FailedToParse as i32,
+        packet: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                    ServerResponseConnection {
+                        status: ServerResponseConnectionStatus::Rejected as i32,
+                        error: ServerResponseConnectionError::FailedToParse as i32,
+                    },
+                )),
             },
         )),
     })),
@@ -36,10 +43,14 @@ static RESPONSE_REJECTED_FAILED_TO_PARSE: Packet = Packet {
 
 static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
     packet: Some(PacketE::ServerPacket(ServerPacket {
-        packet: Some(ServerPacketE::ServerResponseConnection(
-            ServerResponseConnection {
-                status: ServerResponseConnectionStatus::Rejected as i32,
-                error: ServerResponseConnectionError::UnsupportedProtocolVersion as i32,
+        packet: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                    ServerResponseConnection {
+                        status: ServerResponseConnectionStatus::Rejected as i32,
+                        error: ServerResponseConnectionError::UnsupportedProtocolVersion as i32,
+                    },
+                )),
             },
         )),
     })),
@@ -47,10 +58,14 @@ static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
 
 static RESPONSE_ACCEPTED: Packet = Packet {
     packet: Some(PacketE::ServerPacket(ServerPacket {
-        packet: Some(ServerPacketE::ServerResponseConnection(
-            ServerResponseConnection {
-                status: ServerResponseConnectionStatus::Accepted as i32,
-                error: ServerResponseConnectionError::Unspecified as i32,
+        packet: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                    ServerResponseConnection {
+                        status: ServerResponseConnectionStatus::Accepted as i32,
+                        error: ServerResponseConnectionError::Unspecified as i32,
+                    },
+                )),
             },
         )),
     })),
@@ -66,6 +81,15 @@ pub enum AgentPacketReadError {
 
     #[error("Received packet is not an AgentPacket")]
     NoAgentPacket,
+}
+
+#[derive(Debug, Error)]
+pub enum AgentPayloadReadError {
+    #[error("Error reading packet: {0}")]
+    AgentPacketRead(#[from] AgentPacketReadError),
+
+    #[error("Packet is not an AgentPayloadPacket")]
+    NoAgentPayloadPacket,
 }
 
 #[derive(Debug, Error)]
@@ -115,7 +139,10 @@ impl AgentConnection {
 
         let agent_request_connection = match connection_request.packet {
             Some(PacketE::AgentPacket(AgentPacket {
-                packet: Some(AgentPacketE::AgentRequestConnection(req)),
+                packet:
+                    Some(AgentPacketE::AgentHandshakePacket(AgentHandshakePacket {
+                        packet: Some(AgentHandshakePacketE::AgentRequestConnection(req)),
+                    })),
             })) => req,
             Some(PacketE::AgentPacket(AgentPacket { packet: None })) | None => {
                 let _ = write_packet(
@@ -195,16 +222,39 @@ impl AgentConnection {
         }
     }
 
+    pub async fn read_payload(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<AgentPayloadPacket, AgentPayloadReadError> {
+        let agent_packet = self.read_packet(timeout).await?;
+        match agent_packet.packet {
+            Some(AgentPacketE::AgentPayloadPacket(payload)) => Ok(payload),
+            _ => Err(AgentPayloadReadError::NoAgentPayloadPacket),
+        }
+    }
+
     pub async fn write_packet(
         &mut self,
-        server_packet: ServerPacket,
+        packet: ServerPacket,
         timeout: Duration,
     ) -> Result<(), PacketWriteError> {
         let packet = Packet {
-            packet: Some(PacketE::ServerPacket(server_packet)),
+            packet: Some(PacketE::ServerPacket(packet)),
         };
 
         let writer = &mut self.writer;
         write_packet(writer, &packet, timeout).await
+    }
+
+    pub async fn write_payload(
+        &mut self,
+        packet: ServerPayloadPacket,
+        timeout: Duration,
+    ) -> Result<(), PacketWriteError> {
+        let packet = ServerPacket {
+            packet: Some(ServerPacketE::ServerPayloadPacket(packet)),
+        };
+
+        self.write_packet(packet, timeout).await
     }
 }
