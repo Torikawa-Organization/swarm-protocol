@@ -7,7 +7,7 @@ use tokio::{
 };
 
 use crate::{
-    networking::{PacketReadError, PacketWriteError, read_packet, write_packet},
+    networking::{self, PacketReadError, PacketWriteError},
     protocol::{
         self, Version,
         agent::{
@@ -124,18 +124,19 @@ impl AgentConnection {
         mut reader: BufReader<OwnedReadHalf>,
         mut writer: BufWriter<OwnedWriteHalf>,
     ) -> Result<Self, HandshakeError> {
-        let connection_request = match read_packet(&mut reader, Duration::from_secs(2)).await {
-            Ok(packet) => packet,
-            Err(e) => {
-                let _ = write_packet(
-                    &mut writer,
-                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
-                    Duration::from_secs(2),
-                )
-                .await;
-                return Err(HandshakeError::PacketRead(e));
-            }
-        };
+        let connection_request =
+            match networking::read_packet(&mut reader, Duration::from_secs(2)).await {
+                Ok(packet) => packet,
+                Err(e) => {
+                    let _ = networking::write_packet(
+                        &mut writer,
+                        &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                        Duration::from_secs(2),
+                    )
+                    .await;
+                    return Err(HandshakeError::PacketRead(e));
+                }
+            };
 
         let agent_request_connection = match connection_request.packet {
             Some(PacketE::AgentPacket(AgentPacket {
@@ -145,7 +146,7 @@ impl AgentConnection {
                     })),
             })) => req,
             Some(PacketE::AgentPacket(AgentPacket { packet: None })) | None => {
-                let _ = write_packet(
+                let _ = networking::write_packet(
                     &mut writer,
                     &RESPONSE_REJECTED_FAILED_TO_PARSE,
                     Duration::from_secs(2),
@@ -154,7 +155,7 @@ impl AgentConnection {
                 return Err(HandshakeError::NoPayload);
             }
             _ => {
-                let _ = write_packet(
+                let _ = networking::write_packet(
                     &mut writer,
                     &RESPONSE_REJECTED_FAILED_TO_PARSE,
                     Duration::from_secs(2),
@@ -168,7 +169,7 @@ impl AgentConnection {
         let protocol_version = match Version::try_from(protocol_version) {
             Ok(version) => version,
             Err(_) => {
-                let _ = write_packet(
+                let _ = networking::write_packet(
                     &mut writer,
                     &RESPONSE_REJECTED_FAILED_TO_PARSE,
                     Duration::from_secs(2),
@@ -180,7 +181,7 @@ impl AgentConnection {
 
         let expected_version = protocol::VERSION;
         if protocol_version != expected_version {
-            let _ = write_packet(
+            let _ = networking::write_packet(
                 &mut writer,
                 &RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
                 Duration::from_secs(2),
@@ -192,7 +193,7 @@ impl AgentConnection {
             });
         }
 
-        write_packet(&mut writer, &RESPONSE_ACCEPTED, Duration::from_secs(2)).await?;
+        networking::write_packet(&mut writer, &RESPONSE_ACCEPTED, Duration::from_secs(2)).await?;
 
         let identifier = agent_request_connection.identifier;
         Ok(Self {
@@ -212,7 +213,7 @@ impl AgentConnection {
     ) -> Result<AgentPacket, AgentPacketReadError> {
         let reader = &mut self.reader;
 
-        let packet = read_packet(reader, timeout).await?;
+        let packet = networking::read_packet(reader, timeout).await?;
         match packet.packet {
             Some(packet) => match packet {
                 PacketE::AgentPacket(agent_packet) => Ok(agent_packet),
@@ -243,7 +244,7 @@ impl AgentConnection {
         };
 
         let writer = &mut self.writer;
-        write_packet(writer, &packet, timeout).await
+        networking::write_packet(writer, &packet, timeout).await
     }
 
     pub async fn write_payload(
