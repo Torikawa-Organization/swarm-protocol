@@ -97,9 +97,6 @@ pub enum HandshakeError {
     #[error("Error while reading packet from Agent: {0}")]
     PacketRead(#[from] PacketReadError),
 
-    #[error("Received a packet with no payload from Agent during handshake")]
-    NoPayload,
-
     #[error("Received a packet of unexpected type from Agent during handshake")]
     UnexpectedPacketType,
 
@@ -145,15 +142,6 @@ impl AgentConnection {
                         packet: Some(AgentHandshakePacketE::AgentRequestConnection(req)),
                     })),
             })) => req,
-            Some(PacketE::AgentPacket(AgentPacket { packet: None })) | None => {
-                let _ = networking::write_packet(
-                    &mut writer,
-                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
-                    Duration::from_secs(2),
-                )
-                .await;
-                return Err(HandshakeError::NoPayload);
-            }
             _ => {
                 let _ = networking::write_packet(
                     &mut writer,

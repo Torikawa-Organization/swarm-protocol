@@ -33,7 +33,7 @@ pub enum AcceptConnectionError {
 pub struct AgentServerState {
     listener: TcpListener,
     connection_manager: AgentConnectionManager,
-    cancelled: CancellationToken,
+    cancellation_token: CancellationToken,
     receiver_task: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -50,14 +50,14 @@ impl AgentServer {
         info!("Starting Agent server on {}", listener.local_addr()?);
 
         let connection_manager = AgentConnectionManager::new();
-        let cancelled = CancellationToken::new();
+        let cancellation_token = CancellationToken::new();
         let receiver_task = Mutex::new(None);
 
         let server = Self {
             state: Arc::new(AgentServerState {
                 listener,
                 connection_manager,
-                cancelled,
+                cancellation_token,
                 receiver_task,
             }),
         };
@@ -95,7 +95,7 @@ impl AgentServer {
             tokio::select! {
                 biased;
 
-                _ = state.cancelled.cancelled() => {
+                _ = state.cancellation_token.cancelled() => {
                     debug!("Server is shutting down, cancelling accept_connections_loop");
                     break;
                 }
@@ -169,6 +169,6 @@ impl AgentServer {
 impl Drop for AgentServer {
     fn drop(&mut self) {
         info!("Agent server shutting down");
-        self.state.cancelled.cancel();
+        self.state.cancellation_token.cancel();
     }
 }

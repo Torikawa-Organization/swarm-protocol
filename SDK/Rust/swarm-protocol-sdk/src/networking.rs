@@ -29,6 +29,13 @@ pub enum PacketReadError {
     Decode(#[from] prost::DecodeError),
 }
 
+impl PacketReadError {
+    pub fn timeout_from_duration(duration: Duration) -> Self {
+        let duration_string = humantime::format_duration(duration).to_string();
+        PacketReadError::Timeout(duration_string)
+    }
+}
+
 pub async fn read_packet(
     reader: &mut UnpinnableAsyncRead,
     timeout: Duration,
@@ -40,8 +47,7 @@ pub async fn read_packet(
         Ok(Ok(_)) => (),
         Ok(Err(e)) => return Err(PacketReadError::IO(e)),
         Err(_) => {
-            let duration_string = humantime::format_duration(timeout).to_string();
-            return Err(PacketReadError::Timeout(duration_string));
+            return Err(PacketReadError::timeout_from_duration(timeout));
         }
     };
 
@@ -54,14 +60,17 @@ pub async fn read_packet(
         .checked_sub(now.elapsed())
         .unwrap_or_else(|| Duration::from_secs(0));
 
+    if remaining_timeout.is_zero() {
+        return Err(PacketReadError::timeout_from_duration(timeout));
+    }
+
     let mut buffer = vec![0u8; packet_size];
 
     match tokio::time::timeout(remaining_timeout, reader.read_exact(&mut buffer)).await {
         Ok(Ok(_)) => (),
         Ok(Err(e)) => return Err(PacketReadError::IO(e)),
         Err(_) => {
-            let duration_string = humantime::format_duration(timeout).to_string();
-            return Err(PacketReadError::Timeout(duration_string));
+            return Err(PacketReadError::timeout_from_duration(timeout));
         }
     };
 
@@ -84,6 +93,13 @@ pub enum PacketWriteError {
     PacketTooLarge(usize),
 }
 
+impl PacketWriteError {
+    pub fn timeout_from_duration(duration: Duration) -> Self {
+        let duration_string = humantime::format_duration(duration).to_string();
+        PacketWriteError::Timeout(duration_string)
+    }
+}
+
 pub async fn write_packet(
     writer: &mut UnpinnableAsyncWrite,
     packet: &Packet,
@@ -104,8 +120,7 @@ pub async fn write_packet(
         Ok(Ok(_)) => (),
         Ok(Err(e)) => return Err(PacketWriteError::IO(e)),
         Err(_) => {
-            let duration_string = humantime::format_duration(timeout).to_string();
-            return Err(PacketWriteError::Timeout(duration_string));
+            return Err(PacketWriteError::timeout_from_duration(timeout));
         }
     };
 
@@ -113,12 +128,15 @@ pub async fn write_packet(
         .checked_sub(now.elapsed())
         .unwrap_or_else(|| Duration::from_secs(0));
 
+    if remaining_timeout.is_zero() {
+        return Err(PacketWriteError::timeout_from_duration(timeout));
+    }
+
     match tokio::time::timeout(remaining_timeout, writer.write_all(&buffer)).await {
         Ok(Ok(_)) => (),
         Ok(Err(e)) => return Err(PacketWriteError::IO(e)),
         Err(_) => {
-            let duration_string = humantime::format_duration(timeout).to_string();
-            return Err(PacketWriteError::Timeout(duration_string));
+            return Err(PacketWriteError::timeout_from_duration(timeout));
         }
     };
 
