@@ -13,7 +13,7 @@ message AgentAuthenticate {
 }
 
 message AgentHandshakePacket {
-    oneof packet {
+    oneof inner {
         AgentRequestConnection agent_request_connection = 1;
         AgentAuthenticate agent_authenticate = 2;
     }

@@ -1,11 +1,7 @@
 syntax = "proto3";
 package agent.handshake;
 
-enum ServerResponseConnectionStatus {
-    SERVER_RESPONSE_CONNECTION_STATUS_UNSPECIFIED = 0;
-    SERVER_RESPONSE_CONNECTION_STATUS_ACCEPTED = 1;
-    SERVER_RESPONSE_CONNECTION_STATUS_REJECTED = 2;
-}
+message ServerResponseConnectionSuccess {}
 
 enum ServerResponseConnectionError {
     SERVER_RESPONSE_CONNECTION_ERROR_UNSPECIFIED = 0;
@@ -15,22 +11,28 @@ enum ServerResponseConnectionError {
 }
 
 message ServerResponseConnection {
-    ServerResponseConnectionStatus status = 1;
-    ServerResponseConnectionError error = 2;
+    oneof inner {
+        ServerResponseConnectionSuccess success = 1;
+        ServerResponseConnectionError error = 2;
+    }
 }
 
-enum ServerResponseAuthenticationStatus {
-    SERVER_RESPONSE_AUTHENTICATION_STATUS_UNSPECIFIED = 0;
-    SERVER_RESPONSE_AUTHENTICATION_STATUS_SUCCESS = 1;
-    SERVER_RESPONSE_AUTHENTICATION_STATUS_FAILURE = 2;
+message ServerResponseAuthenticationSuccess {}
+
+enum ServerResponseAuthenticationError {
+    SERVER_RESPONSE_AUTHENTICATION_ERROR_UNSPECIFIED = 0;
+    SERVER_RESPONSE_AUTHENTICATION_ERROR_INVALID_SECRET = 1;
 }
 
 message ServerResponseAuthentication {
-    ServerResponseAuthenticationStatus status = 1;
+    oneof inner {
+        ServerResponseAuthenticationSuccess success = 1;
+        ServerResponseAuthenticationError error = 2;
+    }
 }
 
 message ServerHandshakePacket {
-    oneof packet {
+    oneof inner {
         ServerResponseConnection server_response_connection = 1;
         ServerResponseAuthentication server_response_authentication = 2;
     }

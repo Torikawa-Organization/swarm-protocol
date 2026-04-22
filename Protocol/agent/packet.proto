@@ -5,7 +5,7 @@ import "agent/agent_packet.proto";
 import "agent/server_packet.proto";
 
 message Packet {
-    oneof packet {
+    oneof inner {
         AgentPacket agent_packet = 1;
         ServerPacket server_packet = 2;
     }

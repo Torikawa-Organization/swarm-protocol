@@ -5,7 +5,7 @@ import "agent/handshake/agent.proto";
 import "agent/payload/agent.proto";
 
 message AgentPacket {
-    oneof packet {
+    oneof inner {
         handshake.AgentHandshakePacket agent_handshake_packet = 1;
         payload.AgentPayloadPacket agent_payload_packet = 2;
     }

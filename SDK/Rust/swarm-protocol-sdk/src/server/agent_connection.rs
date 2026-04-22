@@ -12,28 +12,30 @@ use crate::{
         self, Version,
         agent::{
             AgentPacket, Packet, ServerPacket,
-            agent_packet::Packet as AgentPacketE,
+            agent_packet::Inner as AgentPacketE,
             handshake::{
                 AgentHandshakePacket, ServerHandshakePacket, ServerResponseConnection,
-                ServerResponseConnectionError, ServerResponseConnectionStatus,
-                agent_handshake_packet::Packet as AgentHandshakePacketE,
-                server_handshake_packet::Packet as ServerHandshakePacketE,
+                ServerResponseConnectionError, ServerResponseConnectionSuccess,
+                agent_handshake_packet::Inner as AgentHandshakePacketE,
+                server_handshake_packet::Inner as ServerHandshakePacketE,
+                server_response_connection::Inner as ServerResponseConnectionE,
             },
-            packet::Packet as PacketE,
+            packet::Inner as PacketE,
             payload::{AgentPayloadPacket, ServerPayloadPacket},
-            server_packet::Packet as ServerPacketE,
+            server_packet::Inner as ServerPacketE,
         },
     },
 };
 
 static RESPONSE_REJECTED_FAILED_TO_PARSE: Packet = Packet {
-    packet: Some(PacketE::ServerPacket(ServerPacket {
-        packet: Some(ServerPacketE::ServerHandshakePacket(
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
             ServerHandshakePacket {
-                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                inner: Some(ServerHandshakePacketE::ServerResponseConnection(
                     ServerResponseConnection {
-                        status: ServerResponseConnectionStatus::Rejected as i32,
-                        error: ServerResponseConnectionError::FailedToParse as i32,
+                        inner: Some(ServerResponseConnectionE::Error(
+                            ServerResponseConnectionError::FailedToParse as i32,
+                        )),
                     },
                 )),
             },
@@ -42,13 +44,14 @@ static RESPONSE_REJECTED_FAILED_TO_PARSE: Packet = Packet {
 };
 
 static RESPONSE_REJECTED_FAILED_TO_READ: Packet = Packet {
-    packet: Some(PacketE::ServerPacket(ServerPacket {
-        packet: Some(ServerPacketE::ServerHandshakePacket(
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
             ServerHandshakePacket {
-                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                inner: Some(ServerHandshakePacketE::ServerResponseConnection(
                     ServerResponseConnection {
-                        status: ServerResponseConnectionStatus::Rejected as i32,
-                        error: ServerResponseConnectionError::FailedToRead as i32,
+                        inner: Some(ServerResponseConnectionE::Error(
+                            ServerResponseConnectionError::FailedToRead as i32,
+                        )),
                     },
                 )),
             },
@@ -57,13 +60,14 @@ static RESPONSE_REJECTED_FAILED_TO_READ: Packet = Packet {
 };
 
 static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
-    packet: Some(PacketE::ServerPacket(ServerPacket {
-        packet: Some(ServerPacketE::ServerHandshakePacket(
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
             ServerHandshakePacket {
-                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                inner: Some(ServerHandshakePacketE::ServerResponseConnection(
                     ServerResponseConnection {
-                        status: ServerResponseConnectionStatus::Rejected as i32,
-                        error: ServerResponseConnectionError::UnsupportedProtocolVersion as i32,
+                        inner: Some(ServerResponseConnectionE::Error(
+                            ServerResponseConnectionError::UnsupportedProtocolVersion as i32,
+                        )),
                     },
                 )),
             },
@@ -72,13 +76,14 @@ static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
 };
 
 static RESPONSE_ACCEPTED: Packet = Packet {
-    packet: Some(PacketE::ServerPacket(ServerPacket {
-        packet: Some(ServerPacketE::ServerHandshakePacket(
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
             ServerHandshakePacket {
-                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                inner: Some(ServerHandshakePacketE::ServerResponseConnection(
                     ServerResponseConnection {
-                        status: ServerResponseConnectionStatus::Accepted as i32,
-                        error: ServerResponseConnectionError::Unspecified as i32,
+                        inner: Some(ServerResponseConnectionE::Success(
+                            ServerResponseConnectionSuccess {},
+                        )),
                     },
                 )),
             },
@@ -150,11 +155,11 @@ impl AgentConnection {
                 }
             };
 
-        let agent_request_connection = match connection_request.packet {
+        let agent_request_connection = match connection_request.inner {
             Some(PacketE::AgentPacket(AgentPacket {
-                packet:
+                inner:
                     Some(AgentPacketE::AgentHandshakePacket(AgentHandshakePacket {
-                        packet: Some(AgentHandshakePacketE::AgentRequestConnection(req)),
+                        inner: Some(AgentHandshakePacketE::AgentRequestConnection(req)),
                     })),
             })) => req,
             _ => {
@@ -217,8 +222,8 @@ impl AgentConnection {
         let reader = &mut self.reader;
 
         let packet = networking::read_packet(reader, timeout).await?;
-        match packet.packet {
-            Some(packet) => match packet {
+        match packet.inner {
+            Some(inner) => match inner {
                 PacketE::AgentPacket(agent_packet) => Ok(agent_packet),
                 _ => Err(AgentPacketReadError::NoAgentPacket),
             },
@@ -231,7 +236,7 @@ impl AgentConnection {
         timeout: Duration,
     ) -> Result<AgentPayloadPacket, AgentPayloadReadError> {
         let agent_packet = self.read_packet(timeout).await?;
-        match agent_packet.packet {
+        match agent_packet.inner {
             Some(AgentPacketE::AgentPayloadPacket(payload)) => Ok(payload),
             _ => Err(AgentPayloadReadError::NoAgentPayloadPacket),
         }
@@ -243,7 +248,7 @@ impl AgentConnection {
         timeout: Duration,
     ) -> Result<(), PacketWriteError> {
         let packet = Packet {
-            packet: Some(PacketE::ServerPacket(packet)),
+            inner: Some(PacketE::ServerPacket(packet)),
         };
 
         let writer = &mut self.writer;
@@ -256,7 +261,7 @@ impl AgentConnection {
         timeout: Duration,
     ) -> Result<(), PacketWriteError> {
         let packet = ServerPacket {
-            packet: Some(ServerPacketE::ServerPayloadPacket(packet)),
+            inner: Some(ServerPacketE::ServerPayloadPacket(packet)),
         };
 
         self.write_packet(packet, timeout).await
