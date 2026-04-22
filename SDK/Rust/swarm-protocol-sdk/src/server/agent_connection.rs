@@ -41,6 +41,21 @@ static RESPONSE_REJECTED_FAILED_TO_PARSE: Packet = Packet {
     })),
 };
 
+static RESPONSE_REJECTED_FAILED_TO_READ: Packet = Packet {
+    packet: Some(PacketE::ServerPacket(ServerPacket {
+        packet: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                packet: Some(ServerHandshakePacketE::ServerResponseConnection(
+                    ServerResponseConnection {
+                        status: ServerResponseConnectionStatus::Rejected as i32,
+                        error: ServerResponseConnectionError::FailedToRead as i32,
+                    },
+                )),
+            },
+        )),
+    })),
+};
+
 static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
     packet: Some(PacketE::ServerPacket(ServerPacket {
         packet: Some(ServerPacketE::ServerHandshakePacket(
@@ -127,7 +142,7 @@ impl AgentConnection {
                 Err(e) => {
                     let _ = networking::write_packet(
                         &mut writer,
-                        &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                        &RESPONSE_REJECTED_FAILED_TO_READ,
                         Duration::from_secs(2),
                     )
                     .await;
@@ -159,7 +174,7 @@ impl AgentConnection {
             Err(_) => {
                 let _ = networking::write_packet(
                     &mut writer,
-                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                    &RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
                     Duration::from_secs(2),
                 )
                 .await;
