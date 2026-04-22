@@ -32,6 +32,7 @@ pub enum AcceptConnectionError {
 
 pub struct AgentServerState {
     listener: TcpListener,
+    secret: String,
     connection_manager: AgentConnectionManager,
     cancellation_token: CancellationToken,
     receiver_task: Mutex<Option<JoinHandle<()>>>,
@@ -44,11 +45,13 @@ pub struct AgentServer {
 impl AgentServer {
     pub async fn bind(
         addr: impl ToSocketAddrs,
+        secret: impl Into<String>,
         start_accepting_connections: bool,
     ) -> Result<Self, AgentServerCreateError> {
         let listener = TcpListener::bind(addr).await?;
         info!("Starting Agent server on {}", listener.local_addr()?);
 
+        let secret = secret.into();
         let connection_manager = AgentConnectionManager::new();
         let cancellation_token = CancellationToken::new();
         let receiver_task = Mutex::new(None);
@@ -56,6 +59,7 @@ impl AgentServer {
         let server = Self {
             state: Arc::new(AgentServerState {
                 listener,
+                secret,
                 connection_manager,
                 cancellation_token,
                 receiver_task,
@@ -134,7 +138,7 @@ impl AgentServer {
         let reader = BufReader::new(reader);
         let writer = BufWriter::new(writer);
 
-        let connection = AgentConnection::handshake(reader, writer).await?;
+        let connection = AgentConnection::handshake(&state.secret, reader, writer).await?;
 
         let identifier = connection.identifier().to_string();
         state.connection_manager.add(connection)?;

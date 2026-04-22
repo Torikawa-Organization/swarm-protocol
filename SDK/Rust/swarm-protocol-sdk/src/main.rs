@@ -11,7 +11,7 @@ pub async fn main() {
         .expect("Logger configuration should be valid");
     lum_log::setup(logger_config).expect("Logger should be set up correctly");
 
-    let _agent_server = AgentServer::bind("127.0.0.1:3120", true)
+    let _agent_server = AgentServer::bind("127.0.0.1:3120", "someSecret", true)
         .await
         .expect("Agent Server should be created successfully");
 

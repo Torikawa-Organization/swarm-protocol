@@ -14,10 +14,13 @@ use crate::{
             AgentPacket, Packet, ServerPacket,
             agent_packet::Inner as AgentPacketE,
             handshake::{
-                AgentHandshakePacket, ServerHandshakePacket, ServerResponseConnection,
-                ServerResponseConnectionError, ServerResponseConnectionSuccess,
+                AgentHandshakePacket, ServerHandshakePacket, ServerResponseAuthentication,
+                ServerResponseAuthenticationError, ServerResponseAuthenticationSuccess,
+                ServerResponseConnection, ServerResponseConnectionError,
+                ServerResponseConnectionSuccess,
                 agent_handshake_packet::Inner as AgentHandshakePacketE,
                 server_handshake_packet::Inner as ServerHandshakePacketE,
+                server_response_authentication::Inner as ServerResponseAuthenticationE,
                 server_response_connection::Inner as ServerResponseConnectionE,
             },
             packet::Inner as PacketE,
@@ -27,23 +30,7 @@ use crate::{
     },
 };
 
-static RESPONSE_REJECTED_FAILED_TO_PARSE: Packet = Packet {
-    inner: Some(PacketE::ServerPacket(ServerPacket {
-        inner: Some(ServerPacketE::ServerHandshakePacket(
-            ServerHandshakePacket {
-                inner: Some(ServerHandshakePacketE::ServerResponseConnection(
-                    ServerResponseConnection {
-                        inner: Some(ServerResponseConnectionE::Error(
-                            ServerResponseConnectionError::FailedToParse as i32,
-                        )),
-                    },
-                )),
-            },
-        )),
-    })),
-};
-
-static RESPONSE_REJECTED_FAILED_TO_READ: Packet = Packet {
+static RESPONSE_CONNECTION_REJECTED_FAILED_TO_READ: Packet = Packet {
     inner: Some(PacketE::ServerPacket(ServerPacket {
         inner: Some(ServerPacketE::ServerHandshakePacket(
             ServerHandshakePacket {
@@ -59,7 +46,23 @@ static RESPONSE_REJECTED_FAILED_TO_READ: Packet = Packet {
     })),
 };
 
-static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
+static RESPONSE_CONNECTION_REJECTED_FAILED_TO_PARSE: Packet = Packet {
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                inner: Some(ServerHandshakePacketE::ServerResponseConnection(
+                    ServerResponseConnection {
+                        inner: Some(ServerResponseConnectionE::Error(
+                            ServerResponseConnectionError::FailedToParse as i32,
+                        )),
+                    },
+                )),
+            },
+        )),
+    })),
+};
+
+static RESPONSE_CONNECTION_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
     inner: Some(PacketE::ServerPacket(ServerPacket {
         inner: Some(ServerPacketE::ServerHandshakePacket(
             ServerHandshakePacket {
@@ -75,7 +78,7 @@ static RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION: Packet = Packet {
     })),
 };
 
-static RESPONSE_ACCEPTED: Packet = Packet {
+static RESPONSE_CONNECTION_ACCEPTED: Packet = Packet {
     inner: Some(PacketE::ServerPacket(ServerPacket {
         inner: Some(ServerPacketE::ServerHandshakePacket(
             ServerHandshakePacket {
@@ -83,6 +86,70 @@ static RESPONSE_ACCEPTED: Packet = Packet {
                     ServerResponseConnection {
                         inner: Some(ServerResponseConnectionE::Success(
                             ServerResponseConnectionSuccess {},
+                        )),
+                    },
+                )),
+            },
+        )),
+    })),
+};
+
+static RESPONSE_AUTHENTICATION_REJECTED_FAILED_TO_READ: Packet = Packet {
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                inner: Some(ServerHandshakePacketE::ServerResponseAuthentication(
+                    ServerResponseAuthentication {
+                        inner: Some(ServerResponseAuthenticationE::Error(
+                            ServerResponseAuthenticationError::FailedToRead as i32,
+                        )),
+                    },
+                )),
+            },
+        )),
+    })),
+};
+
+static RESPONSE_AUTHENTICATION_REJECTED_FAILED_TO_PARSE: Packet = Packet {
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                inner: Some(ServerHandshakePacketE::ServerResponseAuthentication(
+                    ServerResponseAuthentication {
+                        inner: Some(ServerResponseAuthenticationE::Error(
+                            ServerResponseAuthenticationError::FailedToParse as i32,
+                        )),
+                    },
+                )),
+            },
+        )),
+    })),
+};
+
+static RESPONSE_AUTHENTICATION_REJECTED_INVALID_SECRET: Packet = Packet {
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                inner: Some(ServerHandshakePacketE::ServerResponseAuthentication(
+                    ServerResponseAuthentication {
+                        inner: Some(ServerResponseAuthenticationE::Error(
+                            ServerResponseAuthenticationError::InvalidSecret as i32,
+                        )),
+                    },
+                )),
+            },
+        )),
+    })),
+};
+
+static RESPONSE_AUTHENTICATION_ACCEPTED: Packet = Packet {
+    inner: Some(PacketE::ServerPacket(ServerPacket {
+        inner: Some(ServerPacketE::ServerHandshakePacket(
+            ServerHandshakePacket {
+                inner: Some(ServerHandshakePacketE::ServerResponseAuthentication(
+                    ServerResponseAuthentication {
+                        inner: Some(ServerResponseAuthenticationE::Success(
+                            ServerResponseAuthenticationSuccess {},
                         )),
                     },
                 )),
@@ -126,6 +193,9 @@ pub enum HandshakeError {
     #[error("Unsupported protocol version. Expected {expected}, got {found}")]
     UnsupportedProtocolVersion { expected: String, found: String },
 
+    #[error("Invalid secret provided by Agent during handshake")]
+    InvalidSecret,
+
     #[error("Error while writing packet to Agent: {0}")]
     PacketWrite(#[from] PacketWriteError),
 }
@@ -138,16 +208,17 @@ pub struct AgentConnection {
 
 impl AgentConnection {
     pub async fn handshake(
+        secret: &str,
         mut reader: BufReader<OwnedReadHalf>,
         mut writer: BufWriter<OwnedWriteHalf>,
     ) -> Result<Self, HandshakeError> {
-        let connection_request =
+        let agent_packet_connection =
             match networking::read_packet(&mut reader, Duration::from_secs(2)).await {
                 Ok(packet) => packet,
                 Err(e) => {
                     let _ = networking::write_packet(
                         &mut writer,
-                        &RESPONSE_REJECTED_FAILED_TO_READ,
+                        &RESPONSE_CONNECTION_REJECTED_FAILED_TO_READ,
                         Duration::from_secs(2),
                     )
                     .await;
@@ -155,7 +226,7 @@ impl AgentConnection {
                 }
             };
 
-        let agent_request_connection = match connection_request.inner {
+        let agent_request_connection = match agent_packet_connection.inner {
             Some(PacketE::AgentPacket(AgentPacket {
                 inner:
                     Some(AgentPacketE::AgentHandshakePacket(AgentHandshakePacket {
@@ -165,7 +236,7 @@ impl AgentConnection {
             _ => {
                 let _ = networking::write_packet(
                     &mut writer,
-                    &RESPONSE_REJECTED_FAILED_TO_PARSE,
+                    &RESPONSE_CONNECTION_REJECTED_FAILED_TO_PARSE,
                     Duration::from_secs(2),
                 )
                 .await;
@@ -179,7 +250,7 @@ impl AgentConnection {
             Err(_) => {
                 let _ = networking::write_packet(
                     &mut writer,
-                    &RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
+                    &RESPONSE_CONNECTION_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
                     Duration::from_secs(2),
                 )
                 .await;
@@ -191,7 +262,7 @@ impl AgentConnection {
         if protocol_version != expected_version {
             let _ = networking::write_packet(
                 &mut writer,
-                &RESPONSE_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
+                &RESPONSE_CONNECTION_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
                 Duration::from_secs(2),
             )
             .await;
@@ -201,7 +272,62 @@ impl AgentConnection {
             });
         }
 
-        networking::write_packet(&mut writer, &RESPONSE_ACCEPTED, Duration::from_secs(2)).await?;
+        networking::write_packet(
+            &mut writer,
+            &RESPONSE_CONNECTION_ACCEPTED,
+            Duration::from_secs(2),
+        )
+        .await?;
+
+        let agent_packet_authenticate =
+            match networking::read_packet(&mut reader, Duration::from_secs(2)).await {
+                Ok(packet) => packet,
+                Err(e) => {
+                    let _ = networking::write_packet(
+                        &mut writer,
+                        &RESPONSE_AUTHENTICATION_REJECTED_FAILED_TO_READ,
+                        Duration::from_secs(2),
+                    )
+                    .await;
+                    return Err(HandshakeError::PacketRead(e));
+                }
+            };
+
+        let agent_authenticate = match agent_packet_authenticate.inner {
+            Some(PacketE::AgentPacket(AgentPacket {
+                inner:
+                    Some(AgentPacketE::AgentHandshakePacket(AgentHandshakePacket {
+                        inner: Some(AgentHandshakePacketE::AgentAuthenticate(req)),
+                    })),
+            })) => req,
+            _ => {
+                let _ = networking::write_packet(
+                    &mut writer,
+                    &RESPONSE_AUTHENTICATION_REJECTED_FAILED_TO_PARSE,
+                    Duration::from_secs(2),
+                )
+                .await;
+                return Err(HandshakeError::UnexpectedPacketType);
+            }
+        };
+
+        let agent_provided_secret = agent_authenticate.secret;
+        if agent_provided_secret != secret {
+            let _ = networking::write_packet(
+                &mut writer,
+                &RESPONSE_AUTHENTICATION_REJECTED_INVALID_SECRET,
+                Duration::from_secs(2),
+            )
+            .await;
+            return Err(HandshakeError::InvalidSecret);
+        }
+
+        networking::write_packet(
+            &mut writer,
+            &RESPONSE_AUTHENTICATION_ACCEPTED,
+            Duration::from_secs(2),
+        )
+        .await?;
 
         let identifier = agent_request_connection.identifier;
         Ok(Self {
