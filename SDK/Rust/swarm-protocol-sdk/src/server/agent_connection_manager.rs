@@ -63,3 +63,5 @@ impl Default for AgentConnectionManager {
         Self::new()
     }
 }
+
+//TODO: Implement Drop and send disconnect packets to all agents. Maybe needs work in AgentConnection.
