@@ -4,5 +4,5 @@
   "rust-analyzer.cargo.buildScripts.enable": true,
   "rust-analyzer.cargo.buildScripts.rebuildOnSave": true,
   "rust-analyzer.checkOnSave": true,
-  "rust-analyzer.linkedProjects": ["SDK/Rust/swarm-protocol-sdk/Cargo.toml"]
+  "rust-analyzer.linkedProjects": ["SDK/Rust/swarm-protocol-server/Cargo.toml"]
 }
