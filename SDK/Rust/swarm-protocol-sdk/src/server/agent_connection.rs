@@ -1,13 +1,11 @@
 use std::time::Duration;
 
 use thiserror::Error;
-use tokio::{
-    io::{BufReader, BufWriter},
-    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
-};
 
 use crate::{
-    networking::{self, PacketReadError, PacketWriteError},
+    networking::{
+        self, PacketReadError, PacketWriteError, UnpinnableAsyncTlsRead, UnpinnableAsyncTlsWrite,
+    },
     protocol::{
         self, Version,
         agent::{
@@ -202,15 +200,15 @@ pub enum HandshakeError {
 
 pub struct AgentConnection {
     identifier: String,
-    reader: BufReader<OwnedReadHalf>,
-    writer: BufWriter<OwnedWriteHalf>,
+    reader: UnpinnableAsyncTlsRead,
+    writer: UnpinnableAsyncTlsWrite,
 }
 
 impl AgentConnection {
     pub async fn handshake(
         secret: &str,
-        mut reader: BufReader<OwnedReadHalf>,
-        mut writer: BufWriter<OwnedWriteHalf>,
+        mut reader: UnpinnableAsyncTlsRead,
+        mut writer: UnpinnableAsyncTlsWrite,
     ) -> Result<Self, HandshakeError> {
         let agent_packet_connection =
             match networking::read_packet(&mut reader, Duration::from_secs(2)).await {

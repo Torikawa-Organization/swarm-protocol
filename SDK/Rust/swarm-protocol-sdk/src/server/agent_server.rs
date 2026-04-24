@@ -1,6 +1,7 @@
 use std::{io, sync::Arc};
 
 use lum_log::{debug, info, warn};
+use rustls::ServerConfig;
 use thiserror::Error;
 use tokio::{
     io::{BufReader, BufWriter},
@@ -8,6 +9,7 @@ use tokio::{
     sync::Mutex,
     task::JoinHandle,
 };
+use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 
 use crate::server::{
@@ -23,6 +25,9 @@ pub enum AgentServerCreateError {
 
 #[derive(Debug, Error)]
 pub enum AcceptConnectionError {
+    #[error("TLS handshake error: {0}")]
+    Tls(io::Error),
+
     #[error("Handshake error: {0}")]
     Handshake(#[from] HandshakeError),
 
@@ -33,6 +38,7 @@ pub enum AcceptConnectionError {
 pub struct AgentServerState {
     listener: TcpListener,
     secret: String,
+    tls_acceptor: TlsAcceptor,
     connection_manager: AgentConnectionManager,
     cancellation_token: CancellationToken,
     receiver_task: Mutex<Option<JoinHandle<()>>>,
@@ -46,12 +52,14 @@ impl AgentServer {
     pub async fn bind(
         addr: impl ToSocketAddrs,
         secret: impl Into<String>,
+        tls_config: Arc<ServerConfig>,
         start_accepting_connections: bool,
     ) -> Result<Self, AgentServerCreateError> {
         let listener = TcpListener::bind(addr).await?;
         info!("Starting Agent server on {}", listener.local_addr()?);
 
         let secret = secret.into();
+        let tls_acceptor = TlsAcceptor::from(tls_config);
         let connection_manager = AgentConnectionManager::new();
         let cancellation_token = CancellationToken::new();
         let receiver_task = Mutex::new(None);
@@ -60,6 +68,7 @@ impl AgentServer {
             state: Arc::new(AgentServerState {
                 listener,
                 secret,
+                tls_acceptor,
                 connection_manager,
                 cancellation_token,
                 receiver_task,
@@ -134,9 +143,15 @@ impl AgentServer {
         state: Arc<AgentServerState>,
         stream: TcpStream,
     ) -> Result<(String, usize), AcceptConnectionError> {
-        let (reader, writer) = stream.into_split();
-        let reader = BufReader::new(reader);
-        let writer = BufWriter::new(writer);
+        let tls_stream = state
+            .tls_acceptor
+            .accept(stream)
+            .await
+            .map_err(AcceptConnectionError::Tls)?;
+
+        let (read_half, write_half) = tokio::io::split(tls_stream);
+        let reader = BufReader::new(read_half);
+        let writer = BufWriter::new(write_half);
 
         let connection = AgentConnection::handshake(&state.secret, reader, writer).await?;
 

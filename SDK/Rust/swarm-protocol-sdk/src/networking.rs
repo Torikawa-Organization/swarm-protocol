@@ -3,16 +3,24 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::protocol::agent::Packet;
 use prost::Message;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-
-use crate::protocol::agent::Packet;
+use tokio::{
+    io::{
+        AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter, ReadHalf,
+        WriteHalf,
+    },
+    net::TcpStream,
+};
+use tokio_rustls::server::TlsStream;
 
 const MAX_PACKET_SIZE: usize = 32 * 1024 * 1024; // 32 MB //TODO: Make configurable
 
 type UnpinnableAsyncRead = dyn AsyncRead + Unpin + Send;
 type UnpinnableAsyncWrite = dyn AsyncWrite + Unpin + Send;
+pub type UnpinnableAsyncTlsRead = BufReader<ReadHalf<TlsStream<TcpStream>>>;
+pub type UnpinnableAsyncTlsWrite = BufWriter<WriteHalf<TlsStream<TcpStream>>>;
 
 #[derive(Debug, Error)]
 pub enum PacketReadError {
