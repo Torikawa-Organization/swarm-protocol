@@ -36,16 +36,12 @@ pub enum AcceptConnectionError {
 }
 
 pub struct AgentServerConfig {
-    secret: String,
     max_packet_size: usize,
 }
 
 impl AgentServerConfig {
-    pub fn new(secret: impl Into<String>, max_packet_size: usize) -> Self {
-        Self {
-            secret: secret.into(),
-            max_packet_size,
-        }
+    pub fn new(max_packet_size: usize) -> Self {
+        Self { max_packet_size }
     }
 }
 
@@ -166,13 +162,8 @@ impl AgentServer {
         let reader = BufReader::new(read_half);
         let writer = BufWriter::new(write_half);
 
-        let connection = AgentConnection::handshake(
-            &state.config.secret,
-            state.config.max_packet_size,
-            reader,
-            writer,
-        )
-        .await?;
+        let connection =
+            AgentConnection::handshake(state.config.max_packet_size, reader, writer).await?;
 
         let identifier = connection.identifier().to_string();
         state.connection_manager.add(connection)?;

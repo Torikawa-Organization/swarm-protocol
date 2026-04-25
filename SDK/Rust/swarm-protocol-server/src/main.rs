@@ -85,7 +85,7 @@ pub async fn main() {
     let bind_addr = format!("{}:{}", host, port);
     let max_packet_size = args.max_packet_size * 1024 * 1024;
 
-    let config = AgentServerConfig::new("someSecret", max_packet_size);
+    let config = AgentServerConfig::new(max_packet_size);
     let tls_config = load_tls_config(&args.ca_cert, &args.cert, &args.key);
     let _agent_server = AgentServer::bind(bind_addr, config, tls_config, true)
         .await

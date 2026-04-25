@@ -17,25 +17,8 @@ message ServerResponseConnection {
     }
 }
 
-message ServerResponseAuthenticationSuccess {}
-
-enum ServerResponseAuthenticationError {
-    SERVER_RESPONSE_AUTHENTICATION_ERROR_UNSPECIFIED = 0;
-    SERVER_RESPONSE_AUTHENTICATION_ERROR_FAILED_TO_READ = 1;
-    SERVER_RESPONSE_AUTHENTICATION_ERROR_FAILED_TO_PARSE = 2;
-    SERVER_RESPONSE_AUTHENTICATION_ERROR_INVALID_SECRET = 3;
-}
-
-message ServerResponseAuthentication {
-    oneof inner {
-        ServerResponseAuthenticationSuccess success = 1;
-        ServerResponseAuthenticationError error = 2;
-    }
-}
-
 message ServerHandshakePacket {
     oneof inner {
         ServerResponseConnection server_response_connection = 1;
-        ServerResponseAuthentication server_response_authentication = 2;
     }
 }

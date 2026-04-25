@@ -8,13 +8,8 @@ message AgentRequestConnection {
     string identifier = 2;
 }
 
-message AgentAuthenticate {
-    string secret = 1;
-}
-
 message AgentHandshakePacket {
     oneof inner {
         AgentRequestConnection agent_request_connection = 1;
-        AgentAuthenticate agent_authenticate = 2;
     }
 }
