@@ -17,8 +17,8 @@ use tokio_rustls::server::TlsStream;
 
 type UnpinnableAsyncRead = dyn AsyncRead + Unpin + Send;
 type UnpinnableAsyncWrite = dyn AsyncWrite + Unpin + Send;
-pub type UnpinnableAsyncTlsRead = BufReader<ReadHalf<TlsStream<TcpStream>>>;
-pub type UnpinnableAsyncTlsWrite = BufWriter<WriteHalf<TlsStream<TcpStream>>>;
+pub type BufTlsStreamReader = BufReader<ReadHalf<TlsStream<TcpStream>>>;
+pub type BufTlsStreamWriter = BufWriter<WriteHalf<TlsStream<TcpStream>>>;
 
 #[derive(Debug, Error)]
 pub enum PacketReadError {
@@ -60,7 +60,10 @@ pub async fn read_packet(
 
     let packet_size = u32::from_be_bytes(buffer) as usize;
     if packet_size > max_packet_size {
-        return Err(PacketReadError::PacketTooLarge { size: packet_size, max_size: max_packet_size });
+        return Err(PacketReadError::PacketTooLarge {
+            size: packet_size,
+            max_size: max_packet_size,
+        });
     }
 
     let remaining_timeout = timeout
@@ -120,7 +123,10 @@ pub async fn write_packet(
 
     let packet_size = buffer.len() as u32;
     if packet_size as usize > max_packet_size {
-        return Err(PacketWriteError::PacketTooLarge { size: packet_size as usize, max_size: max_packet_size });
+        return Err(PacketWriteError::PacketTooLarge {
+            size: packet_size as usize,
+            max_size: max_packet_size,
+        });
     }
 
     let packet_size_bytes = packet_size.to_be_bytes();

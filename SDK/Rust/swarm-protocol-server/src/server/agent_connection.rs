@@ -3,9 +3,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 use crate::{
-    networking::{
-        self, PacketReadError, PacketWriteError, UnpinnableAsyncTlsRead, UnpinnableAsyncTlsWrite,
-    },
+    networking::{self, BufTlsStreamReader, BufTlsStreamWriter, PacketReadError, PacketWriteError},
     protocol::{
         self, Version,
         agent::{
@@ -131,15 +129,15 @@ pub enum HandshakeError {
 pub struct AgentConnection {
     identifier: String,
     max_packet_size: usize,
-    reader: UnpinnableAsyncTlsRead,
-    writer: UnpinnableAsyncTlsWrite,
+    reader: BufTlsStreamReader,
+    writer: BufTlsStreamWriter,
 }
 
 impl AgentConnection {
     pub async fn handshake(
         max_packet_size: usize,
-        mut reader: UnpinnableAsyncTlsRead,
-        mut writer: UnpinnableAsyncTlsWrite,
+        mut reader: BufTlsStreamReader,
+        mut writer: BufTlsStreamWriter,
     ) -> Result<Self, HandshakeError> {
         let agent_packet_connection =
             match networking::read_packet(&mut reader, Duration::from_secs(2), max_packet_size)
