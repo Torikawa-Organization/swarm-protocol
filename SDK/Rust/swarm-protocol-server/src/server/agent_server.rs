@@ -35,9 +35,23 @@ pub enum AcceptConnectionError {
     AddAgentConnection(#[from] AddAgentConnectionError),
 }
 
+pub struct AgentServerConfig {
+    secret: String,
+    max_packet_size: usize,
+}
+
+impl AgentServerConfig {
+    pub fn new(secret: impl Into<String>, max_packet_size: usize) -> Self {
+        Self {
+            secret: secret.into(),
+            max_packet_size,
+        }
+    }
+}
+
 pub struct AgentServerState {
     listener: TcpListener,
-    secret: String,
+    config: AgentServerConfig,
     tls_acceptor: TlsAcceptor,
     connection_manager: AgentConnectionManager,
     cancellation_token: CancellationToken,
@@ -51,14 +65,13 @@ pub struct AgentServer {
 impl AgentServer {
     pub async fn bind(
         addr: impl ToSocketAddrs,
-        secret: impl Into<String>,
+        config: AgentServerConfig,
         tls_config: Arc<ServerConfig>,
         start_accepting_connections: bool,
     ) -> Result<Self, AgentServerCreateError> {
         let listener = TcpListener::bind(addr).await?;
         info!("Starting Agent server on {}", listener.local_addr()?);
 
-        let secret = secret.into();
         let tls_acceptor = TlsAcceptor::from(tls_config);
         let connection_manager = AgentConnectionManager::new();
         let cancellation_token = CancellationToken::new();
@@ -67,7 +80,7 @@ impl AgentServer {
         let server = Self {
             state: Arc::new(AgentServerState {
                 listener,
-                secret,
+                config,
                 tls_acceptor,
                 connection_manager,
                 cancellation_token,
@@ -153,7 +166,13 @@ impl AgentServer {
         let reader = BufReader::new(read_half);
         let writer = BufWriter::new(write_half);
 
-        let connection = AgentConnection::handshake(&state.secret, reader, writer).await?;
+        let connection = AgentConnection::handshake(
+            &state.config.secret,
+            state.config.max_packet_size,
+            reader,
+            writer,
+        )
+        .await?;
 
         let identifier = connection.identifier().to_string();
         state.connection_manager.add(connection)?;

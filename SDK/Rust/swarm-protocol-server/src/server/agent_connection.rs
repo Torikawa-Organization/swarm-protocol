@@ -200,6 +200,7 @@ pub enum HandshakeError {
 
 pub struct AgentConnection {
     identifier: String,
+    max_packet_size: usize,
     reader: UnpinnableAsyncTlsRead,
     writer: UnpinnableAsyncTlsWrite,
 }
@@ -207,17 +208,21 @@ pub struct AgentConnection {
 impl AgentConnection {
     pub async fn handshake(
         secret: &str,
+        max_packet_size: usize,
         mut reader: UnpinnableAsyncTlsRead,
         mut writer: UnpinnableAsyncTlsWrite,
     ) -> Result<Self, HandshakeError> {
         let agent_packet_connection =
-            match networking::read_packet(&mut reader, Duration::from_secs(2)).await {
+            match networking::read_packet(&mut reader, Duration::from_secs(2), max_packet_size)
+                .await
+            {
                 Ok(packet) => packet,
                 Err(e) => {
                     let _ = networking::write_packet(
                         &mut writer,
                         &RESPONSE_CONNECTION_REJECTED_FAILED_TO_READ,
                         Duration::from_secs(2),
+                        max_packet_size,
                     )
                     .await;
                     return Err(HandshakeError::PacketRead(e));
@@ -236,6 +241,7 @@ impl AgentConnection {
                     &mut writer,
                     &RESPONSE_CONNECTION_REJECTED_FAILED_TO_PARSE,
                     Duration::from_secs(2),
+                    max_packet_size,
                 )
                 .await;
                 return Err(HandshakeError::UnexpectedPacketType);
@@ -250,6 +256,7 @@ impl AgentConnection {
                     &mut writer,
                     &RESPONSE_CONNECTION_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
                     Duration::from_secs(2),
+                    max_packet_size,
                 )
                 .await;
                 return Err(HandshakeError::UnknownProtocolVersion(protocol_version));
@@ -262,6 +269,7 @@ impl AgentConnection {
                 &mut writer,
                 &RESPONSE_CONNECTION_REJECTED_UNSUPPORTED_PROTOCOL_VERSION,
                 Duration::from_secs(2),
+                max_packet_size,
             )
             .await;
             return Err(HandshakeError::UnsupportedProtocolVersion {
@@ -274,17 +282,21 @@ impl AgentConnection {
             &mut writer,
             &RESPONSE_CONNECTION_ACCEPTED,
             Duration::from_secs(2),
+            max_packet_size,
         )
         .await?;
 
         let agent_packet_authenticate =
-            match networking::read_packet(&mut reader, Duration::from_secs(2)).await {
+            match networking::read_packet(&mut reader, Duration::from_secs(2), max_packet_size)
+                .await
+            {
                 Ok(packet) => packet,
                 Err(e) => {
                     let _ = networking::write_packet(
                         &mut writer,
                         &RESPONSE_AUTHENTICATION_REJECTED_FAILED_TO_READ,
                         Duration::from_secs(2),
+                        max_packet_size,
                     )
                     .await;
                     return Err(HandshakeError::PacketRead(e));
@@ -303,6 +315,7 @@ impl AgentConnection {
                     &mut writer,
                     &RESPONSE_AUTHENTICATION_REJECTED_FAILED_TO_PARSE,
                     Duration::from_secs(2),
+                    max_packet_size,
                 )
                 .await;
                 return Err(HandshakeError::UnexpectedPacketType);
@@ -315,6 +328,7 @@ impl AgentConnection {
                 &mut writer,
                 &RESPONSE_AUTHENTICATION_REJECTED_INVALID_SECRET,
                 Duration::from_secs(2),
+                max_packet_size,
             )
             .await;
             return Err(HandshakeError::InvalidSecret);
@@ -324,12 +338,14 @@ impl AgentConnection {
             &mut writer,
             &RESPONSE_AUTHENTICATION_ACCEPTED,
             Duration::from_secs(2),
+            max_packet_size,
         )
         .await?;
 
         let identifier = agent_request_connection.identifier;
         Ok(Self {
             identifier,
+            max_packet_size,
             reader,
             writer,
         })
@@ -344,8 +360,9 @@ impl AgentConnection {
         timeout: Duration,
     ) -> Result<AgentPacket, AgentPacketReadError> {
         let reader = &mut self.reader;
+        let max_packet_size = self.max_packet_size;
 
-        let packet = networking::read_packet(reader, timeout).await?;
+        let packet = networking::read_packet(reader, timeout, max_packet_size).await?;
         match packet.inner {
             Some(inner) => match inner {
                 PacketE::AgentPacket(agent_packet) => Ok(agent_packet),
@@ -376,7 +393,8 @@ impl AgentConnection {
         };
 
         let writer = &mut self.writer;
-        networking::write_packet(writer, &packet, timeout).await
+        let max_packet_size = self.max_packet_size;
+        networking::write_packet(writer, &packet, timeout, max_packet_size).await
     }
 
     pub async fn write_payload(

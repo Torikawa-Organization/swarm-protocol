@@ -15,8 +15,6 @@ use tokio::{
 };
 use tokio_rustls::server::TlsStream;
 
-const MAX_PACKET_SIZE: usize = 32 * 1024 * 1024; // 32 MB //TODO: Make configurable
-
 type UnpinnableAsyncRead = dyn AsyncRead + Unpin + Send;
 type UnpinnableAsyncWrite = dyn AsyncWrite + Unpin + Send;
 pub type UnpinnableAsyncTlsRead = BufReader<ReadHalf<TlsStream<TcpStream>>>;
@@ -30,8 +28,8 @@ pub enum PacketReadError {
     #[error("IO error while reading packet: {0}")]
     IO(#[from] io::Error),
 
-    #[error("Packet size {0} exceeds maximum allowed size of {MAX_PACKET_SIZE} bytes")]
-    PacketTooLarge(usize),
+    #[error("Packet size {size} exceeds maximum allowed size of {max_size} bytes")]
+    PacketTooLarge { size: usize, max_size: usize },
 
     #[error("Error while decoding packet: {0}")]
     Decode(#[from] prost::DecodeError),
@@ -47,6 +45,7 @@ impl PacketReadError {
 pub async fn read_packet(
     reader: &mut UnpinnableAsyncRead,
     timeout: Duration,
+    max_packet_size: usize,
 ) -> Result<Packet, PacketReadError> {
     let now = Instant::now();
 
@@ -60,8 +59,8 @@ pub async fn read_packet(
     };
 
     let packet_size = u32::from_be_bytes(buffer) as usize;
-    if packet_size > MAX_PACKET_SIZE {
-        return Err(PacketReadError::PacketTooLarge(packet_size));
+    if packet_size > max_packet_size {
+        return Err(PacketReadError::PacketTooLarge { size: packet_size, max_size: max_packet_size });
     }
 
     let remaining_timeout = timeout
@@ -97,8 +96,8 @@ pub enum PacketWriteError {
     #[error("Error while encoding packet: {0}")]
     Encode(#[from] prost::EncodeError),
 
-    #[error("Packet size {0} exceeds maximum allowed size of {MAX_PACKET_SIZE} bytes")]
-    PacketTooLarge(usize),
+    #[error("Packet size {size} exceeds maximum allowed size of {max_size} bytes")]
+    PacketTooLarge { size: usize, max_size: usize },
 }
 
 impl PacketWriteError {
@@ -112,6 +111,7 @@ pub async fn write_packet(
     writer: &mut UnpinnableAsyncWrite,
     packet: &Packet,
     timeout: Duration,
+    max_packet_size: usize,
 ) -> Result<(), PacketWriteError> {
     let now = Instant::now();
 
@@ -119,8 +119,8 @@ pub async fn write_packet(
     packet.encode(&mut buffer)?;
 
     let packet_size = buffer.len() as u32;
-    if packet_size as usize > MAX_PACKET_SIZE {
-        return Err(PacketWriteError::PacketTooLarge(packet_size as usize));
+    if packet_size as usize > max_packet_size {
+        return Err(PacketWriteError::PacketTooLarge { size: packet_size as usize, max_size: max_packet_size });
     }
 
     let packet_size_bytes = packet_size.to_be_bytes();
